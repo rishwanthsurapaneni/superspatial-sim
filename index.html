@@ -4,22 +4,31 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Superspatial · Pier 39 — Phase 3 Day Simulator</title>
-  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
-  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
-  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
     html, body, #root { height: 100%; margin: 0; }
     #root { min-height: 100vh; }
-    body { background: #F7F5F0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; }
+    body { background: #F7F5F0; font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
     input[type="range"] { height: 18px; }
+    #err { display:none; padding:16px; margin:16px; border:1px solid #C24C39; border-radius:8px; color:#C24C39; font-family:ui-monospace,monospace; white-space:pre-wrap; }
   </style>
 </head>
 <body>
   <div id="root"></div>
-  <script type="text/babel" data-presets="react">
-const { useRef, useEffect, useState, useCallback } = React;
-
+  <pre id="err"></pre>
+  <script>
+  (function(){
+    function fail(m){ var e=document.getElementById("err"); e.style.display="block"; e.textContent="Load problem: "+m; }
+    if(!window.React || !window.ReactDOM){ fail("React did not load (check your internet connection)."); return; }
+    try {
+const {
+  useRef,
+  useEffect,
+  useState,
+  useCallback
+} = React;
 
 // ── Superspatial · Pier 39 · Phase 3 Day Simulator ───────────────────────
 // A full operating day (8 AM → close). Groups of 1–4 arrive (demand peaks
@@ -31,365 +40,825 @@ const { useRef, useEffect, useState, useCallback } = React;
 // profitable configuration of the levers we control.
 
 const C = {
-  bg1: "#F7F5F0", bg2: "#ECE9E0", panel: "#FFFFFF", panelSoft: "#FBFAF6",
-  line: "#E4E0D4", ink: "#262B2A", mute: "#6E7370", faint: "#A6A99E",
-  teal: "#146B62", tealSoft: "#E1EEEA",
-  brass: "#A97B24", brassSoft: "#F4EAD5",
-  queue: "#D89A2B", chk: "#8C6420", tour: "#147A6F", ret: "#85806F",
-  balk: "#C24C39", done: "#4C9B63", good: "#4C9B63", warn: "#D89A2B", bad: "#C24C39",
+  bg1: "#F7F5F0",
+  bg2: "#ECE9E0",
+  panel: "#FFFFFF",
+  panelSoft: "#FBFAF6",
+  line: "#E4E0D4",
+  ink: "#262B2A",
+  mute: "#6E7370",
+  faint: "#A6A99E",
+  teal: "#146B62",
+  tealSoft: "#E1EEEA",
+  brass: "#A97B24",
+  brassSoft: "#F4EAD5",
+  queue: "#D89A2B",
+  chk: "#8C6420",
+  tour: "#147A6F",
+  ret: "#85806F",
+  balk: "#C24C39",
+  done: "#4C9B63",
+  good: "#4C9B63",
+  warn: "#D89A2B",
+  bad: "#C24C39"
 };
-
-const CURVE = { 8: .15, 9: .30, 10: .50, 11: .70, 12: .90, 13: 1.0, 14: 1.0, 15: .95, 16: .85, 17: .75, 18: .60, 19: .42, 20: .28 };
+const CURVE = {
+  8: .15,
+  9: .30,
+  10: .50,
+  11: .70,
+  12: .90,
+  13: 1.0,
+  14: 1.0,
+  15: .95,
+  16: .85,
+  17: .75,
+  18: .60,
+  19: .42,
+  20: .28
+};
 const SIZE_MIX = [[1, .10], [2, .30], [3, .30], [4, .30]]; // mean ≈ 2.8
-const DAY_MIN = 720, STAFF_RATE = 32, PUCK_KWH = 0.02, BASE_KW = 0.8, AVG = 2.8;
-const SHARE = 0.10;                 // Pier 39 / CBD revenue share
-const EFF = 0.85;                   // congestion factor: variability erodes effective capacity
-const LABOR_H = 12.4;               // staff paid until the last group clears (~8:20 pm)
-const DEV_DAY = 1400 / 600;         // headset+puck kit $1,400 amortized over ~600 operating days
-const PUCK_DAY = 150 / 600;         // spare puck $150 amortized
+const DAY_MIN = 720,
+  STAFF_RATE = 32,
+  PUCK_KWH = 0.02,
+  BASE_KW = 0.8,
+  AVG = 2.8;
+const SHARE = 0.10; // Pier 39 / CBD revenue share
+const EFF = 0.85; // congestion factor: variability erodes effective capacity
+const LABOR_H = 12.4; // staff paid until the last group clears (~8:20 pm)
+const DEV_DAY = 1400 / 600; // headset+puck kit $1,400 amortized over ~600 operating days
+const PUCK_DAY = 150 / 600; // spare puck $150 amortized
 
 const DEFAULTS = {
-  peakFoot: 2500, conv: 2.0,
-  checkin: 9, walk: 2, dwell: 5, clean: 3, patience: 8,
-  stations: 3, returnOps: 1, headsets: 30, spare: 10, toursPerCharge: 8, chargeMin: 120,
-  price: 38, elecRate: 0.35, speed: 22,
+  peakFoot: 2500,
+  conv: 2.0,
+  checkin: 9,
+  walk: 2,
+  dwell: 5,
+  clean: 3,
+  patience: 8,
+  stations: 3,
+  returnOps: 1,
+  headsets: 30,
+  spare: 10,
+  toursPerCharge: 8,
+  chargeMin: 120,
+  price: 38,
+  elecRate: 0.35,
+  speed: 22
 };
-
-const fmt = (n, d = 0) => Number(n).toLocaleString(undefined, { minimumFractionDigits: d, maximumFractionDigits: d });
-const curveAt = (t) => { const h = 8 + t / 60, lo = Math.floor(h), hi = Math.ceil(h); if (hi > 20) return CURVE[20]; const f = h - lo; return (CURVE[lo] ?? .15) * (1 - f) + (CURVE[hi] ?? .28) * f; };
-const sampleSize = () => { let r = Math.random(), c = 0; for (const [s, w] of SIZE_MIX) { c += w; if (r <= c) return s; } return 4; };
-const clockStr = (t) => { const tot = 8 * 60 + Math.min(t, 840); let h = Math.floor(tot / 60) % 24, m = Math.floor(tot % 60); const ap = h >= 12 ? "PM" : "AM"; return `${((h + 11) % 12) + 1}:${String(m).padStart(2, "0")} ${ap}`; };
-const hx = (h) => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)];
-const mixc = (a, b, t) => { const A = hx(a), B = hx(b); return `rgb(${A.map((x, i) => Math.round(x + (B[i] - x) * t)).join(",")})`; };
-const moodColor = (m) => m < 0.5 ? mixc(C.good, C.warn, m * 2) : mixc(C.warn, C.bad, (m - 0.5) * 2);
-const loadColor = (u) => u < 0.7 ? C.good : u < 0.9 ? C.warn : C.bad;
+const fmt = (n, d = 0) => Number(n).toLocaleString(undefined, {
+  minimumFractionDigits: d,
+  maximumFractionDigits: d
+});
+const curveAt = t => {
+  const h = 8 + t / 60,
+    lo = Math.floor(h),
+    hi = Math.ceil(h);
+  if (hi > 20) return CURVE[20];
+  const f = h - lo;
+  return (CURVE[lo] ?? .15) * (1 - f) + (CURVE[hi] ?? .28) * f;
+};
+const sampleSize = () => {
+  let r = Math.random(),
+    c = 0;
+  for (const [s, w] of SIZE_MIX) {
+    c += w;
+    if (r <= c) return s;
+  }
+  return 4;
+};
+const clockStr = t => {
+  const tot = 8 * 60 + Math.min(t, 840);
+  let h = Math.floor(tot / 60) % 24,
+    m = Math.floor(tot % 60);
+  const ap = h >= 12 ? "PM" : "AM";
+  return `${(h + 11) % 12 + 1}:${String(m).padStart(2, "0")} ${ap}`;
+};
+const hx = h => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)];
+const mixc = (a, b, t) => {
+  const A = hx(a),
+    B = hx(b);
+  return `rgb(${A.map((x, i) => Math.round(x + (B[i] - x) * t)).join(",")})`;
+};
+const moodColor = m => m < 0.5 ? mixc(C.good, C.warn, m * 2) : mixc(C.warn, C.bad, (m - 0.5) * 2);
+const loadColor = u => u < 0.7 ? C.good : u < 0.9 ? C.warn : C.bad;
 
 // ── optimizer (deterministic capacity model, calibrated to the sim) ──
 function evalCfg(p, c) {
-  const tour = 4 * p.walk + 3 * p.dwell, hold = p.checkin + tour + p.clean;
+  const tour = 4 * p.walk + 3 * p.dwell,
+    hold = p.checkin + tour + p.clean;
   const caps = {
     "check-in": c.stations * (60 / p.checkin) * AVG,
     "returns": c.returnOps * (60 / p.clean) * AVG,
     "headsets": c.headsets / (hold / 60),
-    "pucks": ((c.headsets + c.spare) * ((p.toursPerCharge * hold) / (p.toursPerCharge * hold + p.chargeMin))) / (hold / 60),
+    "pucks": (c.headsets + c.spare) * (p.toursPerCharge * hold / (p.toursPerCharge * hold + p.chargeMin)) / (hold / 60)
   };
   const bind = Object.entries(caps).sort((a, b) => a[1] - b[1])[0][0];
   const cap = Math.min(...Object.values(caps)) * EFF;
-  let served = 0; for (let t = 0; t < DAY_MIN; t += 30) served += Math.min(p.peakFoot * curveAt(t) * (p.conv / 100), cap) * 0.5;
+  let served = 0;
+  for (let t = 0; t < DAY_MIN; t += 30) served += Math.min(p.peakFoot * curveAt(t) * (p.conv / 100), cap) * 0.5;
   const rev = served * p.price;
   const labor = (c.stations + c.returnOps) * STAFF_RATE * LABOR_H;
-  const elec = ((served / p.toursPerCharge) * PUCK_KWH + BASE_KW * LABOR_H) * p.elecRate;
+  const elec = (served / p.toursPerCharge * PUCK_KWH + BASE_KW * LABOR_H) * p.elecRate;
   const opProfit = rev * (1 - SHARE) - labor - elec;
   const capex = c.headsets * DEV_DAY + c.spare * PUCK_DAY;
-  return { served, rev, labor, elec, opProfit, capex, obj: opProfit - capex, bind };
+  return {
+    served,
+    rev,
+    labor,
+    elec,
+    opProfit,
+    capex,
+    obj: opProfit - capex,
+    bind
+  };
 }
 function optimizeCfg(p) {
   let best = null;
-  for (let stations = 1; stations <= 6; stations++)
-    for (let returnOps = 1; returnOps <= 3; returnOps++)
-      for (let headsets = 8; headsets <= 54; headsets += 2)
-        for (let spare = 0; spare <= 28; spare += 2) {
-          const c = { stations, returnOps, headsets, spare }, r = evalCfg(p, c);
-          const fleet = headsets + spare, staff = stations + returnOps;
-          if (!best || r.obj > best.r.obj + 1e-9 ||
-            (Math.abs(r.obj - best.r.obj) <= 1e-9 && (fleet < best.fleet || (fleet === best.fleet && staff < best.staff))))
-            best = { c, r, fleet, staff };
-        }
+  for (let stations = 1; stations <= 6; stations++) for (let returnOps = 1; returnOps <= 3; returnOps++) for (let headsets = 8; headsets <= 54; headsets += 2) for (let spare = 0; spare <= 28; spare += 2) {
+    const c = {
+        stations,
+        returnOps,
+        headsets,
+        spare
+      },
+      r = evalCfg(p, c);
+    const fleet = headsets + spare,
+      staff = stations + returnOps;
+    if (!best || r.obj > best.r.obj + 1e-9 || Math.abs(r.obj - best.r.obj) <= 1e-9 && (fleet < best.fleet || fleet === best.fleet && staff < best.staff)) best = {
+      c,
+      r,
+      fleet,
+      staff
+    };
+  }
   return best;
 }
 
 // ── canvas glyphs ──
-function rr(ctx, x, y, w, h, r) { ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath(); }
-function drawPerson(ctx, x, y, s, fill, mood, face) {
-  const cx = x, cy = y - s * 1.7;
-  ctx.fillStyle = fill;
-  ctx.beginPath(); ctx.arc(cx, cy, s, 0, 7); ctx.fill();
+function rr(ctx, x, y, w, h, r) {
   ctx.beginPath();
-  ctx.moveTo(x - s, y + s); ctx.lineTo(x - s * 0.72, y - s * 0.15);
-  ctx.quadraticCurveTo(x, y - s * 0.55, x + s * 0.72, y - s * 0.15); ctx.lineTo(x + s, y + s);
-  ctx.closePath(); ctx.fill();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+function drawPerson(ctx, x, y, s, fill, mood, face) {
+  const cx = x,
+    cy = y - s * 1.7;
+  ctx.fillStyle = fill;
+  ctx.beginPath();
+  ctx.arc(cx, cy, s, 0, 7);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(x - s, y + s);
+  ctx.lineTo(x - s * 0.72, y - s * 0.15);
+  ctx.quadraticCurveTo(x, y - s * 0.55, x + s * 0.72, y - s * 0.15);
+  ctx.lineTo(x + s, y + s);
+  ctx.closePath();
+  ctx.fill();
   if (face && s >= 3.4) {
     ctx.fillStyle = "#221a10";
-    ctx.beginPath(); ctx.arc(cx - s * 0.38, cy - s * 0.05, s * 0.16, 0, 7); ctx.fill();
-    ctx.beginPath(); ctx.arc(cx + s * 0.38, cy - s * 0.05, s * 0.16, 0, 7); ctx.fill();
+    ctx.beginPath();
+    ctx.arc(cx - s * 0.38, cy - s * 0.05, s * 0.16, 0, 7);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(cx + s * 0.38, cy - s * 0.05, s * 0.16, 0, 7);
+    ctx.fill();
     const off = (0.5 - mood) * s * 1.15;
-    ctx.strokeStyle = "#221a10"; ctx.lineWidth = Math.max(1, s * 0.22); ctx.lineCap = "round";
-    ctx.beginPath(); ctx.moveTo(cx - s * 0.42, cy + s * 0.4);
-    ctx.quadraticCurveTo(cx, cy + s * 0.4 + off, cx + s * 0.42, cy + s * 0.4); ctx.stroke();
+    ctx.strokeStyle = "#221a10";
+    ctx.lineWidth = Math.max(1, s * 0.22);
+    ctx.lineCap = "round";
+    ctx.beginPath();
+    ctx.moveTo(cx - s * 0.42, cy + s * 0.4);
+    ctx.quadraticCurveTo(cx, cy + s * 0.4 + off, cx + s * 0.42, cy + s * 0.4);
+    ctx.stroke();
   }
 }
 function drawGroup(ctx, x, y, size, fill, mood, face, scale = 1) {
-  const s = 4 * scale, gap = s * 2.5;
+  const s = 4 * scale,
+    gap = s * 2.5;
   for (let i = 0; i < size; i++) drawPerson(ctx, x + (i - (size - 1) / 2) * gap, y + (i % 2 ? -s * 0.5 : 0), s, fill, mood, face);
 }
 function gauge(ctx, x, y, r, frac, ink, ring) {
-  ctx.strokeStyle = ring; ctx.lineWidth = 3.5; ctx.beginPath(); ctx.arc(x, y, r, 0, 7); ctx.stroke();
-  ctx.strokeStyle = loadColor(frac); ctx.lineCap = "round";
-  ctx.beginPath(); ctx.arc(x, y, r, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * Math.min(1, frac)); ctx.stroke();
-  ctx.fillStyle = ink; ctx.font = "700 9px ui-monospace, monospace"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  ctx.strokeStyle = ring;
+  ctx.lineWidth = 3.5;
+  ctx.beginPath();
+  ctx.arc(x, y, r, 0, 7);
+  ctx.stroke();
+  ctx.strokeStyle = loadColor(frac);
+  ctx.lineCap = "round";
+  ctx.beginPath();
+  ctx.arc(x, y, r, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * Math.min(1, frac));
+  ctx.stroke();
+  ctx.fillStyle = ink;
+  ctx.font = "700 9px ui-monospace, monospace";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
   ctx.fillText(`${Math.round(frac * 100)}%`, x, y + 0.5);
   ctx.textBaseline = "alphabetic";
 }
-function battery(ctx, x, y, w, h, state) { // state: 'ready' | 'charging'
+function battery(ctx, x, y, w, h, state) {
+  // state: 'ready' | 'charging'
   rr(ctx, x, y, w, h, 1.5);
-  if (state === "ready") { ctx.fillStyle = C.teal; ctx.fill(); }
-  else { ctx.strokeStyle = C.warn; ctx.lineWidth = 1.2; ctx.stroke(); }
+  if (state === "ready") {
+    ctx.fillStyle = C.teal;
+    ctx.fill();
+  } else {
+    ctx.strokeStyle = C.warn;
+    ctx.lineWidth = 1.2;
+    ctx.stroke();
+  }
   ctx.fillStyle = state === "ready" ? C.teal : C.warn;
   ctx.fillRect(x + w, y + h * 0.28, 1.6, h * 0.44); // nub
 }
 
 // ── UI atoms ──
-function Metric({ label, value, sub, color, big, pct }) {
-  return (
-    <div style={{ background: C.panel, borderColor: C.line, boxShadow: "0 1px 2px rgba(40,40,30,0.05)" }} className={"border rounded-xl px-3 py-2 " + (big ? "md:col-span-2" : "")}>
-      <div style={{ color: C.mute }} className="text-xs font-mono uppercase tracking-wide">{label}</div>
-      <div style={{ color: color || C.ink }} className={"font-mono font-bold leading-tight " + (big ? "text-2xl" : "text-xl")}>{value}</div>
-      {pct !== undefined && (
-        <div style={{ background: C.line }} className="h-1 rounded-full mt-1 overflow-hidden">
-          <div style={{ background: loadColor(pct), width: `${Math.min(100, pct * 100)}%` }} className="h-full" />
-        </div>
-      )}
-      {sub && <div style={{ color: C.faint }} className="text-xs font-mono mt-0.5">{sub}</div>}
-    </div>
-  );
+function Metric({
+  label,
+  value,
+  sub,
+  color,
+  big,
+  pct
+}) {
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: C.panel,
+      borderColor: C.line,
+      boxShadow: "0 1px 2px rgba(40,40,30,0.05)"
+    },
+    className: "border rounded-xl px-3 py-2 " + (big ? "md:col-span-2" : "")
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      color: C.mute
+    },
+    className: "text-xs font-mono uppercase tracking-wide"
+  }, label), /*#__PURE__*/React.createElement("div", {
+    style: {
+      color: color || C.ink
+    },
+    className: "font-mono font-bold leading-tight " + (big ? "text-2xl" : "text-xl")
+  }, value), pct !== undefined && /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: C.line
+    },
+    className: "h-1 rounded-full mt-1 overflow-hidden"
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: loadColor(pct),
+      width: `${Math.min(100, pct * 100)}%`
+    },
+    className: "h-full"
+  })), sub && /*#__PURE__*/React.createElement("div", {
+    style: {
+      color: C.faint
+    },
+    className: "text-xs font-mono mt-0.5"
+  }, sub));
 }
-function Slider({ label, min, max, step, unit, value, onChange }) {
-  return (
-    <label className="block">
-      <div className="flex justify-between items-baseline mb-1">
-        <span style={{ color: C.mute }} className="text-xs">{label}</span>
-        <span style={{ color: C.ink }} className="text-xs font-mono font-semibold">{value}{unit}</span>
-      </div>
-      <input type="range" min={min} max={max} step={step} value={value} onChange={onChange} style={{ accentColor: C.teal, width: "100%" }} />
-    </label>
-  );
+function Slider({
+  label,
+  min,
+  max,
+  step,
+  unit,
+  value,
+  onChange
+}) {
+  return /*#__PURE__*/React.createElement("label", {
+    className: "block"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "flex justify-between items-baseline mb-1"
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      color: C.mute
+    },
+    className: "text-xs"
+  }, label), /*#__PURE__*/React.createElement("span", {
+    style: {
+      color: C.ink
+    },
+    className: "text-xs font-mono font-semibold"
+  }, value, unit)), /*#__PURE__*/React.createElement("input", {
+    type: "range",
+    min: min,
+    max: max,
+    step: step,
+    value: value,
+    onChange: onChange,
+    style: {
+      accentColor: C.teal,
+      width: "100%"
+    }
+  }));
 }
-function Legend({ color, label, hollow }) {
-  return (
-    <div className="flex items-center gap-1.5">
-      <span style={hollow ? { border: `2px solid ${color}` } : { background: color }} className="inline-block w-2.5 h-2.5 rounded-full" />
-      <span style={{ color: C.mute }} className="text-xs font-mono">{label}</span>
-    </div>
-  );
+function Legend({
+  color,
+  label,
+  hollow
+}) {
+  return /*#__PURE__*/React.createElement("div", {
+    className: "flex items-center gap-1.5"
+  }, /*#__PURE__*/React.createElement("span", {
+    style: hollow ? {
+      border: `2px solid ${color}`
+    } : {
+      background: color
+    },
+    className: "inline-block w-2.5 h-2.5 rounded-full"
+  }), /*#__PURE__*/React.createElement("span", {
+    style: {
+      color: C.mute
+    },
+    className: "text-xs font-mono"
+  }, label));
 }
-
 function SuperspatialSim() {
   const [params, setParams] = useState(DEFAULTS);
   const [running, setRunning] = useState(true);
   const [dayDone, setDayDone] = useState(false);
   const [m, setM] = useState(null);
   const [opt, setOpt] = useState(null);
-
-  const paramsRef = useRef(params); paramsRef.current = params;
-  const runningRef = useRef(running); runningRef.current = running;
-  const wrapRef = useRef(null), canvasRef = useRef(null);
-  const sizeRef = useRef({ W: 900, H: 400 });
-  const rafRef = useRef(0), lastMetric = useRef(0);
+  const paramsRef = useRef(params);
+  paramsRef.current = params;
+  const runningRef = useRef(running);
+  runningRef.current = running;
+  const wrapRef = useRef(null),
+    canvasRef = useRef(null);
+  const sizeRef = useRef({
+    W: 900,
+    H: 400
+  });
+  const rafRef = useRef(0),
+    lastMetric = useRef(0);
   const sim = useRef(null);
-
   const initSim = useCallback(() => {
     const p = paramsRef.current;
     sim.current = {
-      t: 0, nextArr: 0, entities: [],
-      charged: Array.from({ length: Math.round(p.headsets) + Math.round(p.spare) }, () => p.toursPerCharge),
-      charging: [], chargeEvents: 0,
-      dayRev: 0, staffCost: 0, servedDay: 0, lostDay: 0, served: [],
-      utilEMA: 0, opEMA: 0, rqEMA: 0, blk: { station: 0, headset: 0, puck: 0 }, lostByHr: {}, ended: false,
+      t: 0,
+      nextArr: 0,
+      entities: [],
+      charged: Array.from({
+        length: Math.round(p.headsets) + Math.round(p.spare)
+      }, () => p.toursPerCharge),
+      charging: [],
+      chargeEvents: 0,
+      dayRev: 0,
+      staffCost: 0,
+      servedDay: 0,
+      lostDay: 0,
+      served: [],
+      utilEMA: 0,
+      opEMA: 0,
+      rqEMA: 0,
+      blk: {
+        station: 0,
+        headset: 0,
+        puck: 0
+      },
+      lostByHr: {},
+      ended: false
     };
   }, []);
   if (!sim.current) initSim();
-
-  const set = (k) => (e) => setParams((p) => ({ ...p, [k]: parseFloat(e.target.value) }));
-  const newDay = () => { initSim(); setDayDone(false); setRunning(true); };
+  const set = k => e => setParams(p => ({
+    ...p,
+    [k]: parseFloat(e.target.value)
+  }));
+  const newDay = () => {
+    initSim();
+    setDayDone(false);
+    setRunning(true);
+  };
   const runOptimize = () => setOpt(optimizeCfg(paramsRef.current));
-  const applyOpt = () => { if (!opt) return; setParams((p) => ({ ...p, ...opt.c })); setTimeout(() => { initSim(); setDayDone(false); setRunning(true); }, 0); };
+  const applyOpt = () => {
+    if (!opt) return;
+    setParams(p => ({
+      ...p,
+      ...opt.c
+    }));
+    setTimeout(() => {
+      initSim();
+      setDayDone(false);
+      setRunning(true);
+    }, 0);
+  };
 
   // geometry: loop with base (check-in + return) at left; stops at top / right / bottom
-  const G = { cx: .53, cy: .47, rx: .36, ry: .34 };
-  const ell = (deg, W, H) => { const a = deg * Math.PI / 180; return { x: (G.cx + G.rx * Math.cos(a)) * W, y: (G.cy + G.ry * Math.sin(a)) * H }; };
+  const G = {
+    cx: .53,
+    cy: .47,
+    rx: .36,
+    ry: .34
+  };
+  const ell = (deg, W, H) => {
+    const a = deg * Math.PI / 180;
+    return {
+      x: (G.cx + G.rx * Math.cos(a)) * W,
+      y: (G.cy + G.ry * Math.sin(a)) * H
+    };
+  };
   const tourState = (e, p) => {
-    const w = p.walk, d = p.dwell;
-    const segs = [
-      { t: "walk", a: 180, b: 270, d: w }, { t: "dwell", ang: 270, node: 1, d },
-      { t: "walk", a: 270, b: 360, d: w }, { t: "dwell", ang: 360, node: 2, d },
-      { t: "walk", a: 360, b: 450, d: w }, { t: "dwell", ang: 450, node: 3, d },
-      { t: "walk", a: 450, b: 540, d: w, ret: true },
-    ];
+    const w = p.walk,
+      d = p.dwell;
+    const segs = [{
+      t: "walk",
+      a: 180,
+      b: 270,
+      d: w
+    }, {
+      t: "dwell",
+      ang: 270,
+      node: 1,
+      d
+    }, {
+      t: "walk",
+      a: 270,
+      b: 360,
+      d: w
+    }, {
+      t: "dwell",
+      ang: 360,
+      node: 2,
+      d
+    }, {
+      t: "walk",
+      a: 360,
+      b: 450,
+      d: w
+    }, {
+      t: "dwell",
+      ang: 450,
+      node: 3,
+      d
+    }, {
+      t: "walk",
+      a: 450,
+      b: 540,
+      d: w,
+      ret: true
+    }];
     let el = e.tourLen - Math.max(0, e.timer);
     for (const g of segs) {
       if (el <= g.d || g === segs[segs.length - 1]) {
         const f = g.d > 0 ? Math.min(1, el / g.d) : 1;
-        if (g.t === "dwell") return { angle: g.ang, node: g.node, ret: false };
-        return { angle: g.a + (g.b - g.a) * f, node: 0, ret: !!g.ret };
+        if (g.t === "dwell") return {
+          angle: g.ang,
+          node: g.node,
+          ret: false
+        };
+        return {
+          angle: g.a + (g.b - g.a) * f,
+          node: 0,
+          ret: !!g.ret
+        };
       }
       el -= g.d;
     }
-    return { angle: 540, node: 0, ret: true };
+    return {
+      angle: 540,
+      node: 0,
+      ret: true
+    };
   };
 
   // ── sim step ──
-  const step = (dt) => {
-    const s = sim.current, p = paramsRef.current;
+  const step = dt => {
+    const s = sim.current,
+      p = paramsRef.current;
     if (s.ended) return;
     s.t += dt;
     const open = s.t < DAY_MIN;
     if (open) {
-      const parties = (p.peakFoot * curveAt(s.t) * (p.conv / 100)) / AVG;
+      const parties = p.peakFoot * curveAt(s.t) * (p.conv / 100) / AVG;
       const meanIA = parties > 0 ? 60 / parties : 1e9;
       let g = 0;
       while (s.t >= s.nextArr && g++ < 60) {
-        if (s.entities.length < 800) s.entities.push({ stage: "Q", wait: 0, size: sampleSize(), timer: 0, pucks: null, seed: Math.random() });
+        if (s.entities.length < 800) s.entities.push({
+          stage: "Q",
+          wait: 0,
+          size: sampleSize(),
+          timer: 0,
+          pucks: null,
+          seed: Math.random()
+        });
         s.nextArr += -Math.log(Math.random()) * meanIA;
       }
     }
-    for (let i = s.charging.length - 1; i >= 0; i--) { s.charging[i] -= dt; if (s.charging[i] <= 0) { s.charging.splice(i, 1); s.charged.push(p.toursPerCharge); } }
+    for (let i = s.charging.length - 1; i >= 0; i--) {
+      s.charging[i] -= dt;
+      if (s.charging[i] <= 0) {
+        s.charging.splice(i, 1);
+        s.charged.push(p.toursPerCharge);
+      }
+    }
     const totalPuck = Math.round(p.headsets) + Math.round(p.spare);
     const inUsePuck = s.entities.reduce((a, e) => a + (e.pucks ? e.pucks.length : 0), 0);
     let curPuck = s.charged.length + s.charging.length + inUsePuck;
-    while (curPuck < totalPuck) { s.charged.push(p.toursPerCharge); curPuck++; }
-    while (curPuck > totalPuck && s.charged.length > 0) { s.charged.pop(); curPuck--; }
-
-    const busyStn = s.entities.filter((e) => e.stage === "CHK").length;
+    while (curPuck < totalPuck) {
+      s.charged.push(p.toursPerCharge);
+      curPuck++;
+    }
+    while (curPuck > totalPuck && s.charged.length > 0) {
+      s.charged.pop();
+      curPuck--;
+    }
+    const busyStn = s.entities.filter(e => e.stage === "CHK").length;
     let freeStn = Math.max(0, Math.round(p.stations) - busyStn);
-    const busyOp = s.entities.filter((e) => e.stage === "CLEAN").length;
+    const busyOp = s.entities.filter(e => e.stage === "CLEAN").length;
     let freeOp = Math.max(0, Math.round(p.returnOps) - busyOp);
-    const rqLen = s.entities.filter((e) => e.stage === "RQ").length;
+    const rqLen = s.entities.filter(e => e.stage === "RQ").length;
     const tourLen = 4 * p.walk + 3 * p.dwell;
     for (const e of s.entities) {
-      if (e.stage === "CHK") { e.timer -= dt; if (e.timer <= 0) { e.stage = "TOUR"; e.timer = e.tourLen; } }
-      else if (e.stage === "TOUR") { e.timer -= dt; if (e.timer <= 0) { e.stage = "RQ"; e.wait = 0; } }
-      else if (e.stage === "CLEAN") { e.timer -= dt; if (e.timer <= 0) {
-        for (const tl of e.pucks) { if (tl - 1 <= 0) { s.charging.push(p.chargeMin); s.chargeEvents++; } else s.charged.push(tl - 1); }
-        e.pucks = null; e.stage = "DONE"; e.fade = 0;
-      } }
-      else if (e.stage === "BALK" || e.stage === "DONE") { e.fade += dt; }
+      if (e.stage === "CHK") {
+        e.timer -= dt;
+        if (e.timer <= 0) {
+          e.stage = "TOUR";
+          e.timer = e.tourLen;
+        }
+      } else if (e.stage === "TOUR") {
+        e.timer -= dt;
+        if (e.timer <= 0) {
+          e.stage = "RQ";
+          e.wait = 0;
+        }
+      } else if (e.stage === "CLEAN") {
+        e.timer -= dt;
+        if (e.timer <= 0) {
+          for (const tl of e.pucks) {
+            if (tl - 1 <= 0) {
+              s.charging.push(p.chargeMin);
+              s.chargeEvents++;
+            } else s.charged.push(tl - 1);
+          }
+          e.pucks = null;
+          e.stage = "DONE";
+          e.fade = 0;
+        }
+      } else if (e.stage === "BALK" || e.stage === "DONE") {
+        e.fade += dt;
+      }
     }
-    for (const e of s.entities) { if (e.stage !== "RQ") continue; e.wait += dt; if (freeOp > 0) { freeOp--; e.stage = "CLEAN"; e.timer = p.clean; } }
+    for (const e of s.entities) {
+      if (e.stage !== "RQ") continue;
+      e.wait += dt;
+      if (freeOp > 0) {
+        freeOp--;
+        e.stage = "CLEAN";
+        e.timer = p.clean;
+      }
+    }
     const inUseHead = s.entities.reduce((a, e) => a + (e.stage === "CHK" || e.stage === "TOUR" || e.stage === "RQ" || e.stage === "CLEAN" ? e.size : 0), 0);
     let hf = Math.round(p.headsets) - inUseHead;
-    let bStation = 0, bHeadset = 0, bPuck = 0;
+    let bStation = 0,
+      bHeadset = 0,
+      bPuck = 0;
     for (const e of s.entities) {
       if (e.stage !== "Q") continue;
       e.wait += dt;
       if (open && freeStn > 0 && hf >= e.size && s.charged.length >= e.size) {
-        freeStn--; hf -= e.size; e.pucks = s.charged.splice(0, e.size);
-        e.stage = "CHK"; e.timer = p.checkin; e.tourLen = tourLen;
-        s.dayRev += e.size * p.price; s.servedDay += e.size; s.served.push({ t: s.t, size: e.size });
+        freeStn--;
+        hf -= e.size;
+        e.pucks = s.charged.splice(0, e.size);
+        e.stage = "CHK";
+        e.timer = p.checkin;
+        e.tourLen = tourLen;
+        s.dayRev += e.size * p.price;
+        s.servedDay += e.size;
+        s.served.push({
+          t: s.t,
+          size: e.size
+        });
       } else if (!open || e.wait > p.patience) {
-        e.stage = "BALK"; e.fade = 0; s.lostDay += e.size;
-        const hr = Math.floor(8 + Math.min(DAY_MIN, s.t) / 60); s.lostByHr[hr] = (s.lostByHr[hr] || 0) + e.size;
-      } else { if (freeStn <= 0) bStation++; else if (hf < e.size) bHeadset++; else if (s.charged.length < e.size) bPuck++; }
+        e.stage = "BALK";
+        e.fade = 0;
+        s.lostDay += e.size;
+        const hr = Math.floor(8 + Math.min(DAY_MIN, s.t) / 60);
+        s.lostByHr[hr] = (s.lostByHr[hr] || 0) + e.size;
+      } else {
+        if (freeStn <= 0) bStation++;else if (hf < e.size) bHeadset++;else if (s.charged.length < e.size) bPuck++;
+      }
     }
-    s.entities = s.entities.filter((e) => !((e.stage === "DONE" && e.fade > 1) || (e.stage === "BALK" && e.fade > 1.6)));
-    const cut = s.t - 30; while (s.served.length && s.served[0].t < cut) s.served.shift();
+    s.entities = s.entities.filter(e => !(e.stage === "DONE" && e.fade > 1 || e.stage === "BALK" && e.fade > 1.6));
+    const cut = s.t - 30;
+    while (s.served.length && s.served[0].t < cut) s.served.shift();
     const k = Math.min(1, dt / 6);
     s.utilEMA += ((Math.round(p.stations) > 0 ? busyStn / Math.round(p.stations) : 0) - s.utilEMA) * k;
     s.opEMA += ((Math.round(p.returnOps) > 0 ? busyOp / Math.round(p.returnOps) : 0) - s.opEMA) * k;
     s.rqEMA += (rqLen - s.rqEMA) * k;
-    s.blk.station += (bStation - s.blk.station) * k; s.blk.headset += (bHeadset - s.blk.headset) * k; s.blk.puck += (bPuck - s.blk.puck) * k;
+    s.blk.station += (bStation - s.blk.station) * k;
+    s.blk.headset += (bHeadset - s.blk.headset) * k;
+    s.blk.puck += (bPuck - s.blk.puck) * k;
     s.staffCost += (Math.round(p.stations) + Math.round(p.returnOps)) * STAFF_RATE * dt / 60; // paid until clear
-    if (!open && s.entities.length === 0 && !s.ended) { s.ended = true; setRunning(false); setDayDone(true); }
+    if (!open && s.entities.length === 0 && !s.ended) {
+      s.ended = true;
+      setRunning(false);
+      setDayDone(true);
+    }
   };
-
   const computeMetrics = () => {
-    const s = sim.current, p = paramsRef.current;
-    const span = Math.min(30, Math.max(4, s.t)); const nowRate = s.served.reduce((a, x) => a + x.size, 0) * (60 / span);
+    const s = sim.current,
+      p = paramsRef.current;
+    const span = Math.min(30, Math.max(4, s.t));
+    const nowRate = s.served.reduce((a, x) => a + x.size, 0) * (60 / span);
     const usableP = s.charged.length;
     const inUse = s.entities.reduce((a, e) => a + (e.stage === "CHK" || e.stage === "TOUR" || e.stage === "RQ" || e.stage === "CLEAN" ? e.size : 0), 0);
     const headsetsFree = Math.max(0, Math.round(p.headsets) - inUse);
-    const occ = { Q: 0, CHK: 0, TOUR: 0, RQ: 0, CLEAN: 0 }; const stop = [0, 0, 0];
+    const occ = {
+      Q: 0,
+      CHK: 0,
+      TOUR: 0,
+      RQ: 0,
+      CLEAN: 0
+    };
+    const stop = [0, 0, 0];
     for (const e of s.entities) {
       if (occ[e.stage] !== undefined) occ[e.stage] += e.size;
-      if (e.stage === "TOUR") { const ts = tourState(e, p); if (ts.node) stop[ts.node - 1] += e.size; }
+      if (e.stage === "TOUR") {
+        const ts = tourState(e, p);
+        if (ts.node) stop[ts.node - 1] += e.size;
+      }
     }
     const hours = s.t / 60;
     const elec = (s.chargeEvents * PUCK_KWH + BASE_KW * hours) * p.elecRate;
     const share = s.dayRev * SHARE;
     const profit = s.dayRev - share - s.staffCost - elec;
-    const b = s.blk; const reason = b.station >= b.headset && b.station >= b.puck ? "station" : b.puck >= b.headset ? "charged puck" : "headset";
-    let diag = { text: "Line is flowing — plenty of headroom.", tone: C.good };
+    const b = s.blk;
+    const reason = b.station >= b.headset && b.station >= b.puck ? "station" : b.puck >= b.headset ? "charged puck" : "headset";
+    let diag = {
+      text: "Line is flowing — plenty of headroom.",
+      tone: C.good
+    };
     if (s.t > 30 && (occ.Q > 4 || s.lostDay > 0)) {
       const maxB = Math.max(b.station, b.headset, b.puck);
-      if (s.rqEMA > 3 && s.opEMA > 0.85) diag = { text: "Returns are backing up — add a return operator; glasses/pucks recycle too slowly.", tone: C.ret };
-      else if (maxB < 0.3 && occ.Q > 6) diag = { text: "Demand is simply high — some groups wait and walk away.", tone: C.brass };
-      else if (maxB === b.station) diag = { text: "Check-in is the bottleneck — add a station or cut check-in time.", tone: C.chk };
-      else if (maxB === b.puck) diag = { text: "Charged pucks are the bottleneck — add spare pucks or charge faster.", tone: C.tour };
-      else diag = { text: "Headsets are the bottleneck — buy more, or clean/return faster.", tone: C.warn };
+      if (s.rqEMA > 3 && s.opEMA > 0.85) diag = {
+        text: "Returns are backing up — add a return operator; glasses/pucks recycle too slowly.",
+        tone: C.ret
+      };else if (maxB < 0.3 && occ.Q > 6) diag = {
+        text: "Demand is simply high — some groups wait and walk away.",
+        tone: C.brass
+      };else if (maxB === b.station) diag = {
+        text: "Check-in is the bottleneck — add a station or cut check-in time.",
+        tone: C.chk
+      };else if (maxB === b.puck) diag = {
+        text: "Charged pucks are the bottleneck — add spare pucks or charge faster.",
+        tone: C.tour
+      };else diag = {
+        text: "Headsets are the bottleneck — buy more, or clean/return faster.",
+        tone: C.warn
+      };
     }
     const worst = Object.entries(s.lostByHr).sort((a, b2) => b2[1] - a[1])[0];
     return {
-      clock: clockStr(s.t), dayPct: Math.min(1, s.t / DAY_MIN), demand: curveAt(Math.min(DAY_MIN, s.t)),
-      gross: s.dayRev, share, labor: s.staffCost, elec, profit, served: s.servedDay, lost: s.lostDay,
+      clock: clockStr(s.t),
+      dayPct: Math.min(1, s.t / DAY_MIN),
+      demand: curveAt(Math.min(DAY_MIN, s.t)),
+      gross: s.dayRev,
+      share,
+      labor: s.staffCost,
+      elec,
+      profit,
+      served: s.servedDay,
+      lost: s.lostDay,
       balkPct: s.servedDay + s.lostDay > 0 ? s.lostDay / (s.servedDay + s.lostDay) : 0,
-      nowRate, util: s.utilEMA, opUtil: s.opEMA, inUse, usableP, charging: s.charging.length, headsetsFree,
-      occ, stop, reason, diag, worst: worst ? { hr: worst[0], n: worst[1] } : null,
+      nowRate,
+      util: s.utilEMA,
+      opUtil: s.opEMA,
+      inUse,
+      usableP,
+      charging: s.charging.length,
+      headsetsFree,
+      occ,
+      stop,
+      reason,
+      diag,
+      worst: worst ? {
+        hr: worst[0],
+        n: worst[1]
+      } : null
     };
   };
 
   // ── draw ──
   const draw = () => {
-    const cv = canvasRef.current; if (!cv) return;
-    const { W, H } = sizeRef.current; const ctx = cv.getContext("2d");
+    const cv = canvasRef.current;
+    if (!cv) return;
+    const {
+      W,
+      H
+    } = sizeRef.current;
+    const ctx = cv.getContext("2d");
     ctx.clearRect(0, 0, W, H);
-    const p = paramsRef.current, S = sim.current;
-    const base = ell(180, W, H), s1 = ell(270, W, H), s2 = ell(0, W, H), s3 = ell(90, W, H);
+    const p = paramsRef.current,
+      S = sim.current;
+    const base = ell(180, W, H),
+      s1 = ell(270, W, H),
+      s2 = ell(0, W, H),
+      s3 = ell(90, W, H);
     // track
-    ctx.strokeStyle = "#E2DDCF"; ctx.lineWidth = 12; ctx.beginPath();
-    ctx.ellipse(G.cx * W, G.cy * H, G.rx * W, G.ry * H, 0, 0, 7); ctx.stroke();
-    ctx.strokeStyle = "#EFEBE0"; ctx.lineWidth = 8; ctx.beginPath();
-    ctx.ellipse(G.cx * W, G.cy * H, G.rx * W, G.ry * H, 0, 0, 7); ctx.stroke();
+    ctx.strokeStyle = "#E2DDCF";
+    ctx.lineWidth = 12;
+    ctx.beginPath();
+    ctx.ellipse(G.cx * W, G.cy * H, G.rx * W, G.ry * H, 0, 0, 7);
+    ctx.stroke();
+    ctx.strokeStyle = "#EFEBE0";
+    ctx.lineWidth = 8;
+    ctx.beginPath();
+    ctx.ellipse(G.cx * W, G.cy * H, G.rx * W, G.ry * H, 0, 0, 7);
+    ctx.stroke();
     // occupancy pre-pass
-    let qC = 0, rqC = 0; const stopN = [0, 0, 0];
+    let qC = 0,
+      rqC = 0;
+    const stopN = [0, 0, 0];
     for (const e of S.entities) {
-      if (e.stage === "Q") qC += e.size; else if (e.stage === "RQ") rqC += e.size;
-      else if (e.stage === "TOUR") { const ts = tourState(e, p); if (ts.node) stopN[ts.node - 1] += e.size; }
+      if (e.stage === "Q") qC += e.size;else if (e.stage === "RQ") rqC += e.size;else if (e.stage === "TOUR") {
+        const ts = tourState(e, p);
+        if (ts.node) stopN[ts.node - 1] += e.size;
+      }
     }
     // stops: node + count badge (fill deepens with occupancy)
     const node = (P, label, n) => {
       const heat = Math.min(1, n / 12);
-      ctx.fillStyle = mixc("#EDF3F0", "#BFE0D9", heat); ctx.strokeStyle = C.tour; ctx.lineWidth = 2;
-      ctx.beginPath(); ctx.arc(P.x, P.y, 14, 0, 7); ctx.fill(); ctx.stroke();
-      ctx.fillStyle = C.ink; ctx.font = "700 11px ui-monospace, monospace"; ctx.textAlign = "center";
+      ctx.fillStyle = mixc("#EDF3F0", "#BFE0D9", heat);
+      ctx.strokeStyle = C.tour;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(P.x, P.y, 14, 0, 7);
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = C.ink;
+      ctx.font = "700 11px ui-monospace, monospace";
+      ctx.textAlign = "center";
       ctx.fillText(label, P.x, P.y - 24);
       // badge
-      const bw = 34, bx = P.x - bw / 2, by = P.y + 20;
+      const bw = 34,
+        bx = P.x - bw / 2,
+        by = P.y + 20;
       rr(ctx, bx, by, bw, 15, 7);
-      ctx.fillStyle = n > 0 ? C.tealSoft : "#F1EFE7"; ctx.fill();
-      ctx.strokeStyle = n > 0 ? C.tour : C.line; ctx.lineWidth = 1; ctx.stroke();
-      ctx.fillStyle = n > 0 ? C.tour : C.faint; ctx.font = "700 10px ui-monospace, monospace";
+      ctx.fillStyle = n > 0 ? C.tealSoft : "#F1EFE7";
+      ctx.fill();
+      ctx.strokeStyle = n > 0 ? C.tour : C.line;
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      ctx.fillStyle = n > 0 ? C.tour : C.faint;
+      ctx.font = "700 10px ui-monospace, monospace";
       ctx.fillText(String(n), P.x, by + 11);
     };
-    node(s1, "STOP 1", stopN[0]); node(s2, "STOP 2", stopN[1]); node(s3, "STOP 3", stopN[2]);
+    node(s1, "STOP 1", stopN[0]);
+    node(s2, "STOP 2", stopN[1]);
+    node(s3, "STOP 3", stopN[2]);
     // base — check-in stack (above) + gauge beside it
-    const nStn = Math.max(1, Math.round(p.stations)), busyStn = S.entities.filter((e) => e.stage === "CHK").length;
-    const sp = 20, top = base.y - nStn * sp / 2 - 8;
+    const nStn = Math.max(1, Math.round(p.stations)),
+      busyStn = S.entities.filter(e => e.stage === "CHK").length;
+    const sp = 20,
+      top = base.y - nStn * sp / 2 - 8;
     for (let i = 0; i < nStn; i++) {
       rr(ctx, base.x - 12, top + i * sp, 24, 15, 3);
-      ctx.fillStyle = i < busyStn ? C.brassSoft : "#F4F1E9"; ctx.fill();
-      ctx.strokeStyle = C.chk; ctx.lineWidth = 1.4; ctx.stroke();
+      ctx.fillStyle = i < busyStn ? C.brassSoft : "#F4F1E9";
+      ctx.fill();
+      ctx.strokeStyle = C.chk;
+      ctx.lineWidth = 1.4;
+      ctx.stroke();
     }
-    ctx.fillStyle = C.ink; ctx.font = "700 11px ui-monospace, monospace"; ctx.textAlign = "center";
+    ctx.fillStyle = C.ink;
+    ctx.font = "700 11px ui-monospace, monospace";
+    ctx.textAlign = "center";
     ctx.fillText("CHECK-IN", base.x, top - 10);
-    gauge(ctx, base.x + 36, top + (nStn * sp) / 2 - 2, 12, S.utilEMA, C.ink, "#E7E2D4");
+    gauge(ctx, base.x + 36, top + nStn * sp / 2 - 2, 12, S.utilEMA, C.ink, "#E7E2D4");
     // return stack (below) + gauge
-    const nOp = Math.max(1, Math.round(p.returnOps)), busyOp = S.entities.filter((e) => e.stage === "CLEAN").length;
+    const nOp = Math.max(1, Math.round(p.returnOps)),
+      busyOp = S.entities.filter(e => e.stage === "CLEAN").length;
     const rTop = base.y + 16;
     for (let i = 0; i < nOp; i++) {
       rr(ctx, base.x - 12, rTop + i * 18, 24, 14, 3);
-      ctx.fillStyle = i < busyOp ? "#EAE6DA" : "#F4F1E9"; ctx.fill();
-      ctx.strokeStyle = C.ret; ctx.lineWidth = 1.4; ctx.stroke();
+      ctx.fillStyle = i < busyOp ? "#EAE6DA" : "#F4F1E9";
+      ctx.fill();
+      ctx.strokeStyle = C.ret;
+      ctx.lineWidth = 1.4;
+      ctx.stroke();
     }
-    ctx.fillStyle = C.ink; ctx.font = "700 10px ui-monospace, monospace";
+    ctx.fillStyle = C.ink;
+    ctx.font = "700 10px ui-monospace, monospace";
     ctx.fillText("RETURN + CLEAN", base.x, rTop + nOp * 18 + 13);
-    gauge(ctx, base.x + 36, rTop + (nOp * 18) / 2 - 2, 12, S.opEMA, C.ink, "#E7E2D4");
+    gauge(ctx, base.x + 36, rTop + nOp * 18 / 2 - 2, 12, S.opEMA, C.ink, "#E7E2D4");
     // puck battery rack
-    const rackY = rTop + nOp * 18 + 24, ready = S.charged.length, chg = S.charging.length;
-    const totalIcons = Math.min(24, ready + chg), perRow = 12;
+    const rackY = rTop + nOp * 18 + 24,
+      ready = S.charged.length,
+      chg = S.charging.length;
+    const totalIcons = Math.min(24, ready + chg),
+      perRow = 12;
     for (let i = 0; i < totalIcons; i++) {
-      const row = Math.floor(i / perRow), col = i % perRow;
+      const row = Math.floor(i / perRow),
+        col = i % perRow;
       battery(ctx, base.x - 66 + col * 12, rackY + row * 10, 8.5, 6, i < Math.min(ready, totalIcons) ? "ready" : "charging");
     }
-    ctx.fillStyle = C.mute; ctx.font = "600 9px ui-monospace, monospace"; ctx.textAlign = "left";
+    ctx.fillStyle = C.mute;
+    ctx.font = "600 9px ui-monospace, monospace";
+    ctx.textAlign = "left";
     ctx.fillText(`pucks: ${ready} ready · ${chg} charging${ready + chg > 24 ? " (+" + (ready + chg - 24) + ")" : ""}`, base.x - 66, rackY + Math.ceil(totalIcons / perRow) * 10 + 10);
     // waiting pill
     if (qC > 0) {
@@ -397,39 +866,105 @@ function SuperspatialSim() {
       ctx.font = "700 10px ui-monospace, monospace";
       const tw = ctx.measureText(label).width + 16;
       rr(ctx, base.x - 60 - tw / 2, base.y - 52, tw, 18, 9);
-      ctx.fillStyle = qC > 7 ? "#F7E3DE" : "#F1EFE7"; ctx.fill();
-      ctx.strokeStyle = qC > 7 ? C.bad : C.line; ctx.lineWidth = 1; ctx.stroke();
-      ctx.fillStyle = qC > 7 ? C.bad : C.mute; ctx.textAlign = "center";
+      ctx.fillStyle = qC > 7 ? "#F7E3DE" : "#F1EFE7";
+      ctx.fill();
+      ctx.strokeStyle = qC > 7 ? C.bad : C.line;
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      ctx.fillStyle = qC > 7 ? C.bad : C.mute;
+      ctx.textAlign = "center";
       ctx.fillText(label, base.x - 60, base.y - 39);
     }
     // entities
-    const idx = { q: 0, chk: 0, rq: 0 };
-    const order = { Q: 0, RQ: 1, CHK: 2, CLEAN: 3, TOUR: 4, DONE: 5, BALK: 6 };
+    const idx = {
+      q: 0,
+      chk: 0,
+      rq: 0
+    };
+    const order = {
+      Q: 0,
+      RQ: 1,
+      CHK: 2,
+      CLEAN: 3,
+      TOUR: 4,
+      DONE: 5,
+      BALK: 6
+    };
     const ents = [...S.entities].sort((a, b) => (order[a.stage] ?? 9) - (order[b.stage] ?? 9));
     for (const e of ents) {
-      let x, y, mood = 0, face = false, color = null, alpha = 1;
-      if (e.stage === "Q") { const i = idx.q++, row = i % 4, col = Math.floor(i / 4); x = base.x - 48 - col * 22; y = base.y - 14 + (row - 1) * 17; mood = Math.min(1, e.wait / p.patience); face = true; }
-      else if (e.stage === "CHK") { const i = idx.chk++ % nStn; x = base.x; y = top + i * sp + 7; mood = 0.12; face = true; color = C.chk; }
-      else if (e.stage === "TOUR") { const ts = tourState(e, p); const P = ell(ts.angle, W, H); x = P.x + (ts.node ? (e.seed - 0.5) * 26 : 0); y = P.y + (ts.node ? (e.seed - 0.5) * 12 : 0); mood = 0.1; color = ts.ret ? C.ret : C.tour; }
-      else if (e.stage === "RQ") { const i = idx.rq++; x = base.x + 34 + (i % 4) * 20; y = base.y + 22 + Math.floor(i / 4) * 16; mood = Math.min(1, e.wait / p.patience); face = true; }
-      else if (e.stage === "CLEAN") { x = base.x; y = rTop + 7; mood = 0.15; color = C.ret; }
-      else if (e.stage === "BALK") { const kk = e.fade / 1.6; x = base.x - 76 - kk * 16; y = base.y + 34 + kk * 66; mood = 1; face = true; alpha = 1 - kk; }
-      else if (e.stage === "DONE") { x = base.x - 4; y = rackY + 26 + e.fade * 14; color = C.done; alpha = 1 - e.fade; }
-      else continue;
+      let x,
+        y,
+        mood = 0,
+        face = false,
+        color = null,
+        alpha = 1;
+      if (e.stage === "Q") {
+        const i = idx.q++,
+          row = i % 4,
+          col = Math.floor(i / 4);
+        x = base.x - 48 - col * 22;
+        y = base.y - 14 + (row - 1) * 17;
+        mood = Math.min(1, e.wait / p.patience);
+        face = true;
+      } else if (e.stage === "CHK") {
+        const i = idx.chk++ % nStn;
+        x = base.x;
+        y = top + i * sp + 7;
+        mood = 0.12;
+        face = true;
+        color = C.chk;
+      } else if (e.stage === "TOUR") {
+        const ts = tourState(e, p);
+        const P = ell(ts.angle, W, H);
+        x = P.x + (ts.node ? (e.seed - 0.5) * 26 : 0);
+        y = P.y + (ts.node ? (e.seed - 0.5) * 12 : 0);
+        mood = 0.1;
+        color = ts.ret ? C.ret : C.tour;
+      } else if (e.stage === "RQ") {
+        const i = idx.rq++;
+        x = base.x + 34 + i % 4 * 20;
+        y = base.y + 22 + Math.floor(i / 4) * 16;
+        mood = Math.min(1, e.wait / p.patience);
+        face = true;
+      } else if (e.stage === "CLEAN") {
+        x = base.x;
+        y = rTop + 7;
+        mood = 0.15;
+        color = C.ret;
+      } else if (e.stage === "BALK") {
+        const kk = e.fade / 1.6;
+        x = base.x - 76 - kk * 16;
+        y = base.y + 34 + kk * 66;
+        mood = 1;
+        face = true;
+        alpha = 1 - kk;
+      } else if (e.stage === "DONE") {
+        x = base.x - 4;
+        y = rackY + 26 + e.fade * 14;
+        color = C.done;
+        alpha = 1 - e.fade;
+      } else continue;
       if (alpha <= 0) continue;
       ctx.globalAlpha = alpha;
       drawGroup(ctx, x, y, e.size, color || moodColor(mood), mood, face, 1);
       ctx.globalAlpha = 1;
     }
   };
-
   useEffect(() => {
     let last = performance.now();
-    const loop = (now) => {
-      const rdt = Math.min(0.1, (now - last) / 1000); last = now;
-      if (runningRef.current) { const sd = rdt * paramsRef.current.speed, ns = Math.max(1, Math.ceil(sd / 0.1)); for (let i = 0; i < ns; i++) step(sd / ns); }
+    const loop = now => {
+      const rdt = Math.min(0.1, (now - last) / 1000);
+      last = now;
+      if (runningRef.current) {
+        const sd = rdt * paramsRef.current.speed,
+          ns = Math.max(1, Math.ceil(sd / 0.1));
+        for (let i = 0; i < ns; i++) step(sd / ns);
+      }
       draw();
-      if (now - lastMetric.current > 130) { lastMetric.current = now; setM(computeMetrics()); }
+      if (now - lastMetric.current > 130) {
+        lastMetric.current = now;
+        setM(computeMetrics());
+      }
       rafRef.current = requestAnimationFrame(loop);
     };
     rafRef.current = requestAnimationFrame(loop);
@@ -438,158 +973,489 @@ function SuperspatialSim() {
   }, []);
   useEffect(() => {
     const resize = () => {
-      const el = wrapRef.current, cv = canvasRef.current; if (!el || !cv) return;
-      const W = el.clientWidth, H = 400, dpr = window.devicePixelRatio || 1;
-      cv.width = W * dpr; cv.height = H * dpr; cv.style.width = W + "px"; cv.style.height = H + "px";
-      cv.getContext("2d").setTransform(dpr, 0, 0, dpr, 0, 0); sizeRef.current = { W, H };
+      const el = wrapRef.current,
+        cv = canvasRef.current;
+      if (!el || !cv) return;
+      const W = el.clientWidth,
+        H = 400,
+        dpr = window.devicePixelRatio || 1;
+      cv.width = W * dpr;
+      cv.height = H * dpr;
+      cv.style.width = W + "px";
+      cv.style.height = H + "px";
+      cv.getContext("2d").setTransform(dpr, 0, 0, dpr, 0, 0);
+      sizeRef.current = {
+        W,
+        H
+      };
     };
-    resize(); window.addEventListener("resize", resize); return () => window.removeEventListener("resize", resize);
+    resize();
+    window.addEventListener("resize", resize);
+    return () => window.removeEventListener("resize", resize);
   }, []);
-
-  return (
-    <div style={{ background: `linear-gradient(160deg, ${C.bg1}, ${C.bg2})`, color: C.ink, minHeight: "100%" }} className="p-4 font-sans">
-      <div className="max-w-6xl mx-auto">
-        <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
-          <div>
-            <div style={{ color: C.brass }} className="text-xs font-mono tracking-widest uppercase">Superspatial · Pier 39</div>
-            <h1 className="text-xl font-bold">Phase 3 · A Day in the Operation</h1>
-          </div>
-          <div className="flex items-center gap-2">
-            {m && <div style={{ background: C.panel, borderColor: C.line }} className="border rounded-lg px-3 py-2 font-mono text-lg font-bold">{m.clock}</div>}
-            <button onClick={() => setRunning((r) => !r)} disabled={dayDone}
-              style={{ background: running ? C.panel : C.teal, borderColor: C.line, color: running ? C.ink : "#fff", opacity: dayDone ? 0.5 : 1 }}
-              className="border rounded-lg px-4 py-2 text-sm font-semibold font-mono">{running ? "❚❚ Pause" : "▶ Play"}</button>
-            <button onClick={newDay} style={{ background: C.panel, borderColor: C.line, color: C.mute }} className="border rounded-lg px-3 py-2 text-sm font-mono">↺ New day</button>
-          </div>
-        </div>
-
-        {m && (
-          <div className="flex items-center gap-3 mb-3">
-            <span style={{ color: C.mute }} className="text-xs font-mono">8 AM</span>
-            <div style={{ background: C.line }} className="relative flex-1 h-2 rounded-full overflow-hidden">
-              <div style={{ background: C.teal, width: `${m.dayPct * 100}%` }} className="absolute left-0 top-0 h-full" />
-            </div>
-            <span style={{ color: C.mute }} className="text-xs font-mono">8 PM</span>
-            <span style={{ color: C.ink }} className="text-xs font-mono font-semibold">demand {Math.round(m.demand * 100)}% of peak</span>
-          </div>
-        )}
-
-        {m && (
-          <div style={{ background: C.panel, borderColor: m.diag.tone }} className="border-l-4 rounded-lg px-3 py-2 mb-3 flex items-center justify-between flex-wrap gap-2">
-            <span style={{ color: m.diag.tone }} className="text-sm font-mono font-semibold">{dayDone ? "Day complete — press ↺ New day to run again." : m.diag.text}</span>
-            <span style={{ color: C.mute }} className="text-xs font-mono">check-in {Math.round(m.util * 100)}% · returns {Math.round(m.opUtil * 100)}% · pucks {m.usableP} ready / {m.charging} charging</span>
-          </div>
-        )}
-
-        <div ref={wrapRef} style={{ background: C.panelSoft, borderColor: C.line, boxShadow: "0 1px 3px rgba(40,40,30,0.06)" }} className="border rounded-xl p-2 mb-2">
-          <canvas ref={canvasRef} />
-        </div>
-
-        <div style={{ background: C.panel, borderColor: C.line }} className="border rounded-lg px-3 py-2 mb-3 flex flex-wrap gap-x-5 gap-y-1">
-          <Legend color={moodColor(0)} label="waiting · happy" />
-          <Legend color={moodColor(0.6)} label="waiting · impatient" />
-          <Legend color={moodColor(1)} label="about to leave" />
-          <Legend color={C.chk} label="checking in" />
-          <Legend color={C.tour} label="on tour" />
-          <Legend color={C.ret} label="returning / cleaning" />
-          <Legend color={C.teal} label="puck ready" />
-          <Legend color={C.warn} label="puck charging" hollow />
-          <span style={{ color: C.faint }} className="text-xs font-mono">each figure = 1 person · gauges = live station utilization</span>
-        </div>
-
-        {/* optimizer */}
-        <div style={{ background: C.tealSoft, borderColor: C.teal }} className="border rounded-xl px-3 py-3 mb-4">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <div style={{ color: C.teal }} className="text-sm font-bold font-mono">Max-profit optimizer</div>
-              <div style={{ color: C.mute }} className="text-xs font-mono">Searches stations, return operators, headsets &amp; spare pucks for the highest daily operating profit at current demand &amp; price (foot traffic held fixed). Fleet size is disciplined by device amortization.</div>
-            </div>
-            <button onClick={runOptimize} style={{ background: C.teal, color: "#fff", borderColor: C.teal }} className="border rounded-lg px-4 py-2 text-sm font-semibold font-mono whitespace-nowrap">Find best setup</button>
-          </div>
-          {opt && (
-            <div style={{ background: C.panel, borderColor: C.line }} className="border rounded-lg px-3 py-2 mt-3 flex flex-wrap items-center justify-between gap-3">
-              <div className="font-mono text-sm" style={{ color: C.ink }}>
-                <b>{opt.c.stations}</b> stations · <b>{opt.c.returnOps}</b> return op · <b>{opt.c.headsets}</b> headsets · <b>{opt.c.spare}</b> spare pucks
-                <span style={{ color: C.mute }}> — first constraint to bind: {opt.r.bind}</span>
-                <div style={{ color: C.mute }} className="text-xs mt-1">
-                  ≈ {fmt(opt.r.served)} served/day · gross ${fmt(opt.r.rev)} · <b style={{ color: C.teal }}>operating profit ${fmt(opt.r.opProfit)}/day</b> (after 10% Pier 39 share; device amortization ≈ ${fmt(opt.r.capex)}/day used to size the fleet)
-                </div>
-              </div>
-              <button onClick={applyOpt} style={{ background: C.panel, color: C.teal, borderColor: C.teal }} className="border rounded-lg px-3 py-2 text-sm font-semibold font-mono">Apply &amp; run</button>
-            </div>
-          )}
-        </div>
-
-        {m && (
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-4">
-            <Metric big label="Operating profit — today" value={"$" + fmt(m.profit)} sub={"revenue − Pier 39 share − labor − electricity"} color={m.profit >= 0 ? C.teal : C.balk} />
-            <Metric label="Gross revenue" value={"$" + fmt(m.gross)} sub={fmt(m.served) + " people served"} color={C.brass} />
-            <Metric label="Pier 39 share (10%)" value={"$" + fmt(m.share)} sub="community benefit district" />
-            <Metric label="Labor cost" value={"$" + fmt(m.labor)} sub={(Math.round(params.stations) + Math.round(params.returnOps)) + " staff @ $32/hr, till last group clears"} />
-            <Metric label="Electricity" value={"$" + fmt(m.elec, 2)} sub={"@ $" + params.elecRate + "/kWh (charging + base load)"} />
-            <Metric label="Walked away" value={fmt(m.lost)} sub={fmt(m.balkPct * 100) + "% left — wait too long"} color={m.balkPct > 0.12 ? C.balk : C.ink} />
-            <Metric label="Pace right now" value={fmt(m.nowRate) + "/hr"} sub="peak target ≈ 40/hr" />
-            <Metric label="Check-in load" value={fmt(m.util * 100) + "%"} pct={m.util} sub={Math.round(params.stations) + " station(s)"} />
-            <Metric label="Return load" value={fmt(m.opUtil * 100) + "%"} pct={m.opUtil} sub={Math.round(params.returnOps) + " operator(s)"} />
-            <Metric label="Headsets in use" value={m.inUse + " / " + Math.round(params.headsets)} pct={Math.round(params.headsets) > 0 ? m.inUse / Math.round(params.headsets) : 0} sub={m.headsetsFree + " idle"} />
-            <Metric label="At the stops now" value={m.stop[0] + " · " + m.stop[1] + " · " + m.stop[2]} sub="stop 1 · 2 · 3" color={C.tour} />
-            <Metric label="In the loop" value={fmt(m.occ.TOUR)} sub="people touring right now" />
-          </div>
-        )}
-
-        {m && dayDone && m.worst && (
-          <div style={{ background: C.brassSoft, borderColor: C.brass }} className="border rounded-lg px-3 py-2 mb-4">
-            <span style={{ color: C.ink }} className="text-sm font-mono">Biggest lost-revenue window: <b>{m.worst.hr}:00</b> — {m.worst.n} people walked away that hour (≈ ${fmt(m.worst.n * params.price)} of demand). That's where extra capacity would pay off most.</span>
-          </div>
-        )}
-
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <div style={{ background: C.panel, borderColor: C.line, boxShadow: "0 1px 2px rgba(40,40,30,0.05)" }} className="border rounded-xl p-3">
-            <div style={{ color: C.teal }} className="text-xs font-mono uppercase tracking-wider mb-3">Demand</div>
-            <div className="space-y-3">
-              <Slider label="Peak foot traffic (midday)" min={500} max={5000} step={100} unit="/hr" value={params.peakFoot} onChange={set("peakFoot")} />
-              <Slider label="Conversion" min={0.2} max={6} step={0.1} unit="%" value={params.conv} onChange={set("conv")} />
-            </div>
-            <div style={{ color: C.faint }} className="text-xs font-mono mt-3 leading-relaxed">Group mix fixed 1–4 (avg ≈ 2.8). Foot traffic is not ours to control.</div>
-          </div>
-          <div style={{ background: C.panel, borderColor: C.line, boxShadow: "0 1px 2px rgba(40,40,30,0.05)" }} className="border rounded-xl p-3">
-            <div style={{ color: C.teal }} className="text-xs font-mono uppercase tracking-wider mb-3">Process (min)</div>
-            <div className="space-y-3">
-              <Slider label="Check-in / onboarding" min={2} max={15} step={0.5} unit="m" value={params.checkin} onChange={set("checkin")} />
-              <Slider label="Walk between points" min={0.5} max={6} step={0.5} unit="m" value={params.walk} onChange={set("walk")} />
-              <Slider label="Content per stop" min={1} max={10} step={0.5} unit="m" value={params.dwell} onChange={set("dwell")} />
-              <Slider label="Clean + puck swap" min={1} max={8} step={0.5} unit="m" value={params.clean} onChange={set("clean")} />
-              <Slider label="Patience before leaving" min={2} max={20} step={1} unit="m" value={params.patience} onChange={set("patience")} />
-            </div>
-          </div>
-          <div style={{ background: C.panel, borderColor: C.line, boxShadow: "0 1px 2px rgba(40,40,30,0.05)" }} className="border rounded-xl p-3">
-            <div style={{ color: C.teal }} className="text-xs font-mono uppercase tracking-wider mb-3">Resources</div>
-            <div className="space-y-3">
-              <Slider label="Check-in stations" min={1} max={8} step={1} unit="" value={params.stations} onChange={set("stations")} />
-              <Slider label="Return operators" min={1} max={5} step={1} unit="" value={params.returnOps} onChange={set("returnOps")} />
-              <Slider label="Headsets owned" min={4} max={80} step={1} unit="" value={params.headsets} onChange={set("headsets")} />
-              <Slider label="Spare pucks" min={0} max={40} step={1} unit="" value={params.spare} onChange={set("spare")} />
-              <Slider label="Puck runtime" min={3} max={20} step={1} unit=" tours" value={params.toursPerCharge} onChange={set("toursPerCharge")} />
-              <Slider label="Puck charge time" min={30} max={240} step={10} unit="m" value={params.chargeMin} onChange={set("chargeMin")} />
-            </div>
-          </div>
-          <div style={{ background: C.panel, borderColor: C.line, boxShadow: "0 1px 2px rgba(40,40,30,0.05)" }} className="border rounded-xl p-3">
-            <div style={{ color: C.teal }} className="text-xs font-mono uppercase tracking-wider mb-3">Economics &amp; Sim</div>
-            <div className="space-y-3">
-              <Slider label="Price per person" min={15} max={80} step={1} unit="$" value={params.price} onChange={set("price")} />
-              <Slider label="Electricity rate" min={0.1} max={0.6} step={0.01} unit="$/kWh" value={params.elecRate} onChange={set("elecRate")} />
-              <Slider label="Sim speed (day pace)" min={4} max={90} step={2} unit="×" value={params.speed} onChange={set("speed")} />
-            </div>
-            <div style={{ color: C.faint }} className="text-xs font-mono mt-3 leading-relaxed">Revenue booked at check-in. Operating profit = revenue − 10% Pier 39 share − labor − electricity. Device amortization is used by the optimizer only.</div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: `linear-gradient(160deg, ${C.bg1}, ${C.bg2})`,
+      color: C.ink,
+      minHeight: "100%"
+    },
+    className: "p-4 font-sans"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "max-w-6xl mx-auto"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "flex flex-wrap items-center justify-between gap-3 mb-3"
+  }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    style: {
+      color: C.brass
+    },
+    className: "text-xs font-mono tracking-widest uppercase"
+  }, "Superspatial · Pier 39"), /*#__PURE__*/React.createElement("h1", {
+    className: "text-xl font-bold"
+  }, "Phase 3 · A Day in the Operation")), /*#__PURE__*/React.createElement("div", {
+    className: "flex items-center gap-2"
+  }, m && /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: C.panel,
+      borderColor: C.line
+    },
+    className: "border rounded-lg px-3 py-2 font-mono text-lg font-bold"
+  }, m.clock), /*#__PURE__*/React.createElement("button", {
+    onClick: () => setRunning(r => !r),
+    disabled: dayDone,
+    style: {
+      background: running ? C.panel : C.teal,
+      borderColor: C.line,
+      color: running ? C.ink : "#fff",
+      opacity: dayDone ? 0.5 : 1
+    },
+    className: "border rounded-lg px-4 py-2 text-sm font-semibold font-mono"
+  }, running ? "❚❚ Pause" : "▶ Play"), /*#__PURE__*/React.createElement("button", {
+    onClick: newDay,
+    style: {
+      background: C.panel,
+      borderColor: C.line,
+      color: C.mute
+    },
+    className: "border rounded-lg px-3 py-2 text-sm font-mono"
+  }, "↺ New day"))), m && /*#__PURE__*/React.createElement("div", {
+    className: "flex items-center gap-3 mb-3"
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      color: C.mute
+    },
+    className: "text-xs font-mono"
+  }, "8 AM"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: C.line
+    },
+    className: "relative flex-1 h-2 rounded-full overflow-hidden"
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: C.teal,
+      width: `${m.dayPct * 100}%`
+    },
+    className: "absolute left-0 top-0 h-full"
+  })), /*#__PURE__*/React.createElement("span", {
+    style: {
+      color: C.mute
+    },
+    className: "text-xs font-mono"
+  }, "8 PM"), /*#__PURE__*/React.createElement("span", {
+    style: {
+      color: C.ink
+    },
+    className: "text-xs font-mono font-semibold"
+  }, "demand ", Math.round(m.demand * 100), "% of peak")), m && /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: C.panel,
+      borderColor: m.diag.tone
+    },
+    className: "border-l-4 rounded-lg px-3 py-2 mb-3 flex items-center justify-between flex-wrap gap-2"
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      color: m.diag.tone
+    },
+    className: "text-sm font-mono font-semibold"
+  }, dayDone ? "Day complete — press ↺ New day to run again." : m.diag.text), /*#__PURE__*/React.createElement("span", {
+    style: {
+      color: C.mute
+    },
+    className: "text-xs font-mono"
+  }, "check-in ", Math.round(m.util * 100), "% · returns ", Math.round(m.opUtil * 100), "% · pucks ", m.usableP, " ready / ", m.charging, " charging")), /*#__PURE__*/React.createElement("div", {
+    ref: wrapRef,
+    style: {
+      background: C.panelSoft,
+      borderColor: C.line,
+      boxShadow: "0 1px 3px rgba(40,40,30,0.06)"
+    },
+    className: "border rounded-xl p-2 mb-2"
+  }, /*#__PURE__*/React.createElement("canvas", {
+    ref: canvasRef
+  })), /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: C.panel,
+      borderColor: C.line
+    },
+    className: "border rounded-lg px-3 py-2 mb-3 flex flex-wrap gap-x-5 gap-y-1"
+  }, /*#__PURE__*/React.createElement(Legend, {
+    color: moodColor(0),
+    label: "waiting · happy"
+  }), /*#__PURE__*/React.createElement(Legend, {
+    color: moodColor(0.6),
+    label: "waiting · impatient"
+  }), /*#__PURE__*/React.createElement(Legend, {
+    color: moodColor(1),
+    label: "about to leave"
+  }), /*#__PURE__*/React.createElement(Legend, {
+    color: C.chk,
+    label: "checking in"
+  }), /*#__PURE__*/React.createElement(Legend, {
+    color: C.tour,
+    label: "on tour"
+  }), /*#__PURE__*/React.createElement(Legend, {
+    color: C.ret,
+    label: "returning / cleaning"
+  }), /*#__PURE__*/React.createElement(Legend, {
+    color: C.teal,
+    label: "puck ready"
+  }), /*#__PURE__*/React.createElement(Legend, {
+    color: C.warn,
+    label: "puck charging",
+    hollow: true
+  }), /*#__PURE__*/React.createElement("span", {
+    style: {
+      color: C.faint
+    },
+    className: "text-xs font-mono"
+  }, "each figure = 1 person · gauges = live station utilization")), /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: C.tealSoft,
+      borderColor: C.teal
+    },
+    className: "border rounded-xl px-3 py-3 mb-4"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "flex flex-wrap items-center justify-between gap-3"
+  }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    style: {
+      color: C.teal
+    },
+    className: "text-sm font-bold font-mono"
+  }, "Max-profit optimizer"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      color: C.mute
+    },
+    className: "text-xs font-mono"
+  }, "Searches stations, return operators, headsets & spare pucks for the highest daily operating profit at current demand & price (foot traffic held fixed). Fleet size is disciplined by device amortization.")), /*#__PURE__*/React.createElement("button", {
+    onClick: runOptimize,
+    style: {
+      background: C.teal,
+      color: "#fff",
+      borderColor: C.teal
+    },
+    className: "border rounded-lg px-4 py-2 text-sm font-semibold font-mono whitespace-nowrap"
+  }, "Find best setup")), opt && /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: C.panel,
+      borderColor: C.line
+    },
+    className: "border rounded-lg px-3 py-2 mt-3 flex flex-wrap items-center justify-between gap-3"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "font-mono text-sm",
+    style: {
+      color: C.ink
+    }
+  }, /*#__PURE__*/React.createElement("b", null, opt.c.stations), " stations · ", /*#__PURE__*/React.createElement("b", null, opt.c.returnOps), " return op · ", /*#__PURE__*/React.createElement("b", null, opt.c.headsets), " headsets · ", /*#__PURE__*/React.createElement("b", null, opt.c.spare), " spare pucks", /*#__PURE__*/React.createElement("span", {
+    style: {
+      color: C.mute
+    }
+  }, " — first constraint to bind: ", opt.r.bind), /*#__PURE__*/React.createElement("div", {
+    style: {
+      color: C.mute
+    },
+    className: "text-xs mt-1"
+  }, "≈ ", fmt(opt.r.served), " served/day · gross $", fmt(opt.r.rev), " · ", /*#__PURE__*/React.createElement("b", {
+    style: {
+      color: C.teal
+    }
+  }, "operating profit $", fmt(opt.r.opProfit), "/day"), " (after 10% Pier 39 share; device amortization ≈ $", fmt(opt.r.capex), "/day used to size the fleet)")), /*#__PURE__*/React.createElement("button", {
+    onClick: applyOpt,
+    style: {
+      background: C.panel,
+      color: C.teal,
+      borderColor: C.teal
+    },
+    className: "border rounded-lg px-3 py-2 text-sm font-semibold font-mono"
+  }, "Apply & run"))), m && /*#__PURE__*/React.createElement("div", {
+    className: "grid grid-cols-2 md:grid-cols-4 gap-2 mb-4"
+  }, /*#__PURE__*/React.createElement(Metric, {
+    big: true,
+    label: "Operating profit — today",
+    value: "$" + fmt(m.profit),
+    sub: "revenue − Pier 39 share − labor − electricity",
+    color: m.profit >= 0 ? C.teal : C.balk
+  }), /*#__PURE__*/React.createElement(Metric, {
+    label: "Gross revenue",
+    value: "$" + fmt(m.gross),
+    sub: fmt(m.served) + " people served",
+    color: C.brass
+  }), /*#__PURE__*/React.createElement(Metric, {
+    label: "Pier 39 share (10%)",
+    value: "$" + fmt(m.share),
+    sub: "community benefit district"
+  }), /*#__PURE__*/React.createElement(Metric, {
+    label: "Labor cost",
+    value: "$" + fmt(m.labor),
+    sub: Math.round(params.stations) + Math.round(params.returnOps) + " staff @ $32/hr, till last group clears"
+  }), /*#__PURE__*/React.createElement(Metric, {
+    label: "Electricity",
+    value: "$" + fmt(m.elec, 2),
+    sub: "@ $" + params.elecRate + "/kWh (charging + base load)"
+  }), /*#__PURE__*/React.createElement(Metric, {
+    label: "Walked away",
+    value: fmt(m.lost),
+    sub: fmt(m.balkPct * 100) + "% left — wait too long",
+    color: m.balkPct > 0.12 ? C.balk : C.ink
+  }), /*#__PURE__*/React.createElement(Metric, {
+    label: "Pace right now",
+    value: fmt(m.nowRate) + "/hr",
+    sub: "peak target ≈ 40/hr"
+  }), /*#__PURE__*/React.createElement(Metric, {
+    label: "Check-in load",
+    value: fmt(m.util * 100) + "%",
+    pct: m.util,
+    sub: Math.round(params.stations) + " station(s)"
+  }), /*#__PURE__*/React.createElement(Metric, {
+    label: "Return load",
+    value: fmt(m.opUtil * 100) + "%",
+    pct: m.opUtil,
+    sub: Math.round(params.returnOps) + " operator(s)"
+  }), /*#__PURE__*/React.createElement(Metric, {
+    label: "Headsets in use",
+    value: m.inUse + " / " + Math.round(params.headsets),
+    pct: Math.round(params.headsets) > 0 ? m.inUse / Math.round(params.headsets) : 0,
+    sub: m.headsetsFree + " idle"
+  }), /*#__PURE__*/React.createElement(Metric, {
+    label: "At the stops now",
+    value: m.stop[0] + " · " + m.stop[1] + " · " + m.stop[2],
+    sub: "stop 1 · 2 · 3",
+    color: C.tour
+  }), /*#__PURE__*/React.createElement(Metric, {
+    label: "In the loop",
+    value: fmt(m.occ.TOUR),
+    sub: "people touring right now"
+  })), m && dayDone && m.worst && /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: C.brassSoft,
+      borderColor: C.brass
+    },
+    className: "border rounded-lg px-3 py-2 mb-4"
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      color: C.ink
+    },
+    className: "text-sm font-mono"
+  }, "Biggest lost-revenue window: ", /*#__PURE__*/React.createElement("b", null, m.worst.hr, ":00"), " — ", m.worst.n, " people walked away that hour (≈ $", fmt(m.worst.n * params.price), " of demand). That's where extra capacity would pay off most.")), /*#__PURE__*/React.createElement("div", {
+    className: "grid grid-cols-1 md:grid-cols-4 gap-4"
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: C.panel,
+      borderColor: C.line,
+      boxShadow: "0 1px 2px rgba(40,40,30,0.05)"
+    },
+    className: "border rounded-xl p-3"
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      color: C.teal
+    },
+    className: "text-xs font-mono uppercase tracking-wider mb-3"
+  }, "Demand"), /*#__PURE__*/React.createElement("div", {
+    className: "space-y-3"
+  }, /*#__PURE__*/React.createElement(Slider, {
+    label: "Peak foot traffic (midday)",
+    min: 500,
+    max: 5000,
+    step: 100,
+    unit: "/hr",
+    value: params.peakFoot,
+    onChange: set("peakFoot")
+  }), /*#__PURE__*/React.createElement(Slider, {
+    label: "Conversion",
+    min: 0.2,
+    max: 6,
+    step: 0.1,
+    unit: "%",
+    value: params.conv,
+    onChange: set("conv")
+  })), /*#__PURE__*/React.createElement("div", {
+    style: {
+      color: C.faint
+    },
+    className: "text-xs font-mono mt-3 leading-relaxed"
+  }, "Group mix fixed 1–4 (avg ≈ 2.8). Foot traffic is not ours to control.")), /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: C.panel,
+      borderColor: C.line,
+      boxShadow: "0 1px 2px rgba(40,40,30,0.05)"
+    },
+    className: "border rounded-xl p-3"
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      color: C.teal
+    },
+    className: "text-xs font-mono uppercase tracking-wider mb-3"
+  }, "Process (min)"), /*#__PURE__*/React.createElement("div", {
+    className: "space-y-3"
+  }, /*#__PURE__*/React.createElement(Slider, {
+    label: "Check-in / onboarding",
+    min: 2,
+    max: 15,
+    step: 0.5,
+    unit: "m",
+    value: params.checkin,
+    onChange: set("checkin")
+  }), /*#__PURE__*/React.createElement(Slider, {
+    label: "Walk between points",
+    min: 0.5,
+    max: 6,
+    step: 0.5,
+    unit: "m",
+    value: params.walk,
+    onChange: set("walk")
+  }), /*#__PURE__*/React.createElement(Slider, {
+    label: "Content per stop",
+    min: 1,
+    max: 10,
+    step: 0.5,
+    unit: "m",
+    value: params.dwell,
+    onChange: set("dwell")
+  }), /*#__PURE__*/React.createElement(Slider, {
+    label: "Clean + puck swap",
+    min: 1,
+    max: 8,
+    step: 0.5,
+    unit: "m",
+    value: params.clean,
+    onChange: set("clean")
+  }), /*#__PURE__*/React.createElement(Slider, {
+    label: "Patience before leaving",
+    min: 2,
+    max: 20,
+    step: 1,
+    unit: "m",
+    value: params.patience,
+    onChange: set("patience")
+  }))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: C.panel,
+      borderColor: C.line,
+      boxShadow: "0 1px 2px rgba(40,40,30,0.05)"
+    },
+    className: "border rounded-xl p-3"
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      color: C.teal
+    },
+    className: "text-xs font-mono uppercase tracking-wider mb-3"
+  }, "Resources"), /*#__PURE__*/React.createElement("div", {
+    className: "space-y-3"
+  }, /*#__PURE__*/React.createElement(Slider, {
+    label: "Check-in stations",
+    min: 1,
+    max: 8,
+    step: 1,
+    unit: "",
+    value: params.stations,
+    onChange: set("stations")
+  }), /*#__PURE__*/React.createElement(Slider, {
+    label: "Return operators",
+    min: 1,
+    max: 5,
+    step: 1,
+    unit: "",
+    value: params.returnOps,
+    onChange: set("returnOps")
+  }), /*#__PURE__*/React.createElement(Slider, {
+    label: "Headsets owned",
+    min: 4,
+    max: 80,
+    step: 1,
+    unit: "",
+    value: params.headsets,
+    onChange: set("headsets")
+  }), /*#__PURE__*/React.createElement(Slider, {
+    label: "Spare pucks",
+    min: 0,
+    max: 40,
+    step: 1,
+    unit: "",
+    value: params.spare,
+    onChange: set("spare")
+  }), /*#__PURE__*/React.createElement(Slider, {
+    label: "Puck runtime",
+    min: 3,
+    max: 20,
+    step: 1,
+    unit: " tours",
+    value: params.toursPerCharge,
+    onChange: set("toursPerCharge")
+  }), /*#__PURE__*/React.createElement(Slider, {
+    label: "Puck charge time",
+    min: 30,
+    max: 240,
+    step: 10,
+    unit: "m",
+    value: params.chargeMin,
+    onChange: set("chargeMin")
+  }))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: C.panel,
+      borderColor: C.line,
+      boxShadow: "0 1px 2px rgba(40,40,30,0.05)"
+    },
+    className: "border rounded-xl p-3"
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      color: C.teal
+    },
+    className: "text-xs font-mono uppercase tracking-wider mb-3"
+  }, "Economics & Sim"), /*#__PURE__*/React.createElement("div", {
+    className: "space-y-3"
+  }, /*#__PURE__*/React.createElement(Slider, {
+    label: "Price per person",
+    min: 15,
+    max: 80,
+    step: 1,
+    unit: "$",
+    value: params.price,
+    onChange: set("price")
+  }), /*#__PURE__*/React.createElement(Slider, {
+    label: "Electricity rate",
+    min: 0.1,
+    max: 0.6,
+    step: 0.01,
+    unit: "$/kWh",
+    value: params.elecRate,
+    onChange: set("elecRate")
+  }), /*#__PURE__*/React.createElement(Slider, {
+    label: "Sim speed (day pace)",
+    min: 4,
+    max: 90,
+    step: 2,
+    unit: "×",
+    value: params.speed,
+    onChange: set("speed")
+  })), /*#__PURE__*/React.createElement("div", {
+    style: {
+      color: C.faint
+    },
+    className: "text-xs font-mono mt-3 leading-relaxed"
+  }, "Revenue booked at check-in. Operating profit = revenue − 10% Pier 39 share − labor − electricity. Device amortization is used by the optimizer only.")))));
 }
-
-const root = ReactDOM.createRoot(document.getElementById("root"));
-root.render(<SuperspatialSim />);
-</script>
+      var root = ReactDOM.createRoot(document.getElementById("root"));
+      root.render(React.createElement(SuperspatialSim));
+    } catch(e){ fail((e && e.message) ? e.message : String(e)); }
+  })();
+  </script>
 </body>
 </html>
